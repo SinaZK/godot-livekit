@@ -12,9 +12,10 @@ dependencyResolutionManagement {
         mavenCentral()
         maven("https://plugins.gradle.org/m2/")
         maven("https://s01.oss.sonatype.org/content/repositories/snapshots/")
+        maven ("https://jitpack.io")
     }
 }
 
 // TODO: Update project's name.
-rootProject.name = "GodotAndroidPluginTemplate"
+rootProject.name = "GodotLivekit"
 include(":plugin")
