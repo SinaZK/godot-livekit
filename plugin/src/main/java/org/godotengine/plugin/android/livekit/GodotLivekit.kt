@@ -2,20 +2,21 @@
 package org.godotengine.plugin.android.livekit
 
 import android.util.Log
-import android.widget.Toast
 import androidx.lifecycle.Lifecycle
-import io.livekit.android.events.RoomEvent
-import io.livekit.android.events.collect
-import io.livekit.android.room.Room
-import io.livekit.android.room.track.VideoTrack
-import kotlinx.coroutines.launch
-import org.godotengine.godot.Godot
-import org.godotengine.godot.plugin.GodotPlugin
-import org.godotengine.godot.plugin.UsedByGodot
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
 import androidx.lifecycle.lifecycleScope
 import io.livekit.android.LiveKit
+import io.livekit.android.events.RoomEvent
+import io.livekit.android.events.collect
+import io.livekit.android.room.Room
+import io.livekit.android.room.participant.Participant
+import io.livekit.android.room.track.VideoTrack
+import kotlinx.coroutines.launch
+import org.godotengine.godot.Godot
+import org.godotengine.godot.plugin.GodotPlugin
+import org.godotengine.godot.plugin.SignalInfo
+import org.godotengine.godot.plugin.UsedByGodot
 
 class GodotLivekit(godot: Godot): GodotPlugin(godot), LifecycleOwner {
 
@@ -25,6 +26,16 @@ class GodotLivekit(godot: Godot): GodotPlugin(godot), LifecycleOwner {
     private var lifecycleRegistry = LifecycleRegistry(this)
 
     override fun getPluginName() = BuildConfig.GODOT_PLUGIN_NAME
+
+    override fun getPluginSignals(): MutableSet<SignalInfo> {
+        val signals: MutableSet<SignalInfo> = HashSet()
+
+        signals.add(SignalInfo("event", String::class.java))
+        signals.add(SignalInfo("participant_connected", String::class.java))
+        signals.add(SignalInfo("participant_disconnected", String::class.java))
+
+        return signals
+    }
 
     @UsedByGodot
     fun init(url:String) {
@@ -61,18 +72,18 @@ class GodotLivekit(godot: Godot): GodotPlugin(godot), LifecycleOwner {
                 room.events.collect { event ->
                     when (event) {
                         is RoomEvent.TrackSubscribed -> onTrackSubscribed(event)
-                        is RoomEvent.Connected -> Log.i(TAG, "Event| Connected")
-                        is RoomEvent.Disconnected -> Log.i(TAG, "Event| DisConnected")
-                        is RoomEvent.FailedToConnect -> Log.i(TAG, "Event| FailedToConnect")
-                        is RoomEvent.ActiveSpeakersChanged ->
-                            if (event.speakers.isNotEmpty()) {
-                                Log.i(TAG,
-                                    "Event| ActiveSpeakersChanged ${event.speakers[0].name}")
-                            }
-                        is RoomEvent.ParticipantConnected -> Log.i(TAG,
-                            "Event| ParticipantConnected${event.participant}")
-                        is RoomEvent.ParticipantDisconnected -> Log.i(TAG,
-                            "Event| ParticipantDisconnected$event")
+                        is RoomEvent.Connected -> onConnected()
+                        is RoomEvent.Disconnected -> onDisconnected()
+                        is RoomEvent.FailedToConnect -> onConnectionFailed()
+//                        is RoomEvent.ActiveSpeakersChanged ->
+//                            if (event.speakers.isNotEmpty()) {
+//                                Log.i(TAG,
+//                                    "Event| ActiveSpeakersChanged ${event.speakers[0].name}")
+//                            }
+                        is RoomEvent.Reconnecting -> onReconnecting()
+                        is RoomEvent.Reconnected -> onReconnected()
+                        is RoomEvent.ParticipantConnected -> onParticipantConnected(event)
+                        is RoomEvent.ParticipantDisconnected -> onParticipantDisconnected(event)
                         else -> {}
                     }
                 }
@@ -92,7 +103,64 @@ class GodotLivekit(godot: Godot): GodotPlugin(godot), LifecycleOwner {
         }
     }
 
+    @UsedByGodot
+    fun muteParticipant(username: String) {
+
+        room.remoteParticipants[Participant.Identity(username)]?.trackPublications?.forEach {
+            it.value.track?.enabled ?: false
+        }
+    }
+
+
+    @UsedByGodot
+    fun unmuteParticipant(username: String) {
+
+        room.remoteParticipants[Participant.Identity(username)]?.trackPublications?.forEach {
+            it.value.track?.enabled ?: true
+        }
+    }
+
+    @UsedByGodot
+    fun activeSpeakers(): Array<String?> {
+        val ret: MutableList<String> = ArrayList()
+        for (speaker in room.activeSpeakers) {
+            ret.add(speaker.identity.toString())
+        }
+
+        return (ret as List<String>).toTypedArray()
+    }
+
+    private fun onParticipantConnected(event: RoomEvent.ParticipantConnected) {
+        emitSignal("participant_connected", event.participant.identity.toString())
+    }
+
+    private fun onParticipantDisconnected(event: RoomEvent.ParticipantDisconnected) {
+        emitSignal("participant_disconnected", event.participant.identity.toString())
+    }
+
+    private fun onReconnecting() {
+        emitSignal("event", "reconnecting")
+    }
+
+    private fun onReconnected() {
+        emitSignal("event", "reconnected")
+    }
+
+    private fun onConnected() {
+        emitSignal("event", "connected")
+    }
+
+    private fun onDisconnected() {
+        emitSignal("event", "disconnected")
+    }
+
+    private fun onConnectionFailed() {
+        emitSignal("event", "connection_error")
+    }
+
     private fun onTrackSubscribed(event: RoomEvent.TrackSubscribed) {
+        emitSignal("event", "TrackSubscribed")
+
         val track = event.track
         if (track is VideoTrack) {
             attachVideo(track)
