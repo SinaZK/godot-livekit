@@ -103,6 +103,7 @@ class GodotLivekit(godot: Godot): GodotPlugin(godot), LifecycleOwner {
         }
     }
 
+
     @UsedByGodot
     fun muteParticipant(username: String) {
 
@@ -131,11 +132,11 @@ class GodotLivekit(godot: Godot): GodotPlugin(godot), LifecycleOwner {
     }
 
     private fun onParticipantConnected(event: RoomEvent.ParticipantConnected) {
-        emitSignal("participant_connected", event.participant.identity.toString())
+        emitSignal("participant_connected", event.participant.identity?.value)
     }
 
     private fun onParticipantDisconnected(event: RoomEvent.ParticipantDisconnected) {
-        emitSignal("participant_disconnected", event.participant.identity.toString())
+        emitSignal("participant_disconnected", event.participant.identity?.value)
     }
 
     private fun onReconnecting() {
